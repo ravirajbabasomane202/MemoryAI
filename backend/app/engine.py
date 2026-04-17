@@ -129,6 +129,9 @@ class WorkflowEngine:
         except Exception:  # noqa: BLE001
             self.results[node.id] = None
             await self.emit(node.id, status='error', output=traceback.format_exc())
+        except Exception as exc:  # noqa: BLE001
+            self.results[node.id] = None
+            await self.emit(node.id, status='error', output=str(exc))
 
     async def _run_ai_node(self, node: FlowNode, input_values: list[Any]) -> str:
         prompt = node.data.prompt or ''
