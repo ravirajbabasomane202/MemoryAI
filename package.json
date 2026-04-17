@@ -1,0 +1,12 @@
+{
+  "name": "memoraflow",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && uvicorn app.main:app --reload --port 8008",
+    "build:frontend": "cd frontend && npm run build",
+    "tauri:dev": "cd tauri/src-tauri && cargo tauri dev",
+    "tauri:build": "cd tauri/src-tauri && cargo tauri build"
+  }
+}

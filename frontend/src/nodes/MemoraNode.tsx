@@ -1,0 +1,84 @@
+import { Handle, Position } from '@xyflow/react';
+import type { MemoraNodeData } from '../types/workflow';
+import { useWorkflowStore } from '../store/useWorkflowStore';
+
+const statusClasses = {
+  idle: 'border-slate-700',
+  running: 'border-sky-400 animate-pulse',
+  success: 'border-emerald-500',
+  error: 'border-rose-500',
+  paused: 'border-amber-500'
+};
+
+export function MemoraNode({ id, data }: { id: string; data: MemoraNodeData }) {
+  const { mode, updateNodeData } = useWorkflowStore();
+  const readOnly = mode === 'user';
+
+  return (
+    <div className={`w-80 border-2 bg-slate-900/90 p-3 shadow-xl ${statusClasses[data.status]}`}>
+      <Handle type="target" position={Position.Left} className="!bg-sky-400" />
+      <div className="mb-2 flex items-center justify-between">
+        <strong>{data.label}</strong>
+        <span className="rounded bg-slate-800 px-2 py-1 text-xs uppercase">{data.status}</span>
+      </div>
+
+      {data.type === 'ai' && (
+        <>
+          <input
+            className="mb-2 w-full rounded bg-slate-800 p-2 text-sm"
+            value={data.model ?? ''}
+            onChange={(e) => updateNodeData(id, { model: e.target.value })}
+            disabled={readOnly}
+            placeholder="Ollama model"
+          />
+          <textarea
+            className="h-24 w-full rounded bg-slate-800 p-2 text-sm"
+            value={data.prompt ?? ''}
+            disabled={readOnly}
+            onChange={(e) => updateNodeData(id, { prompt: e.target.value })}
+          />
+        </>
+      )}
+
+      {data.type === 'python' && (
+        <textarea
+          className="h-24 w-full rounded bg-slate-800 p-2 text-sm font-mono"
+          value={data.code ?? ''}
+          disabled={readOnly}
+          onChange={(e) => updateNodeData(id, { code: e.target.value })}
+        />
+      )}
+
+      {data.type === 'memory' && (
+        <>
+          <input
+            className="mb-2 w-full rounded bg-slate-800 p-2 text-sm"
+            value={data.memoryKey ?? ''}
+            disabled={readOnly}
+            onChange={(e) => updateNodeData(id, { memoryKey: e.target.value })}
+            placeholder="Memory key"
+          />
+          <textarea
+            className="h-16 w-full rounded bg-slate-800 p-2 text-sm"
+            value={data.memoryValue ?? ''}
+            disabled={readOnly}
+            onChange={(e) => updateNodeData(id, { memoryValue: e.target.value })}
+            placeholder="Stored value"
+          />
+        </>
+      )}
+
+      {(data.type === 'condition' || data.type === 'combine') && (
+        <input
+          className="w-full rounded bg-slate-800 p-2 text-sm"
+          value={data.condition ?? data.combineMode ?? ''}
+          disabled={readOnly}
+          onChange={(e) => updateNodeData(id, { condition: e.target.value })}
+        />
+      )}
+
+      <div className="mt-2 max-h-28 overflow-auto rounded bg-black/30 p-2 text-xs text-slate-300">{data.output || 'No output yet.'}</div>
+      <Handle type="source" position={Position.Right} className="!bg-emerald-400" />
+    </div>
+  );
+}
