@@ -4,10 +4,10 @@ import asyncio
 import uuid
 from collections import defaultdict
 
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 
-from .db import init_db, save_workflow
+from .db import append_run_log, init_db, save_workflow
 from .engine import WorkflowEngine
 from .schemas import EventMessage, WorkflowPayload
 
@@ -22,6 +22,7 @@ app.add_middleware(
 
 run_queues: dict[str, asyncio.Queue[EventMessage]] = defaultdict(asyncio.Queue)
 run_engines: dict[str, WorkflowEngine] = {}
+run_tasks: dict[str, asyncio.Task[None]] = {}
 
 
 @app.on_event('startup')
@@ -56,6 +57,7 @@ async def run(payload: WorkflowPayload) -> dict[str, str]:
     run_id = str(uuid.uuid4())
 
     async def sink(message: EventMessage) -> None:
+        await append_run_log(run_id, message.node_id, message.status, message.output or message.chunk)
         await run_queues[run_id].put(message)
 
     engine = WorkflowEngine(sink)
@@ -64,28 +66,40 @@ async def run(payload: WorkflowPayload) -> dict[str, str]:
     async def execute() -> None:
         try:
             await engine.run(payload)
+        except asyncio.CancelledError:
+            await run_queues[run_id].put(EventMessage(node_id='system', status='stopped'))
+            raise
         finally:
-            await run_queues[run_id].put(EventMessage(node_id='system', status='completed'))
+            await run_queues[run_id].put(EventMessage(node_id='system', status='completed', meta={'progress': 1.0}))
 
-    asyncio.create_task(execute())
+    run_tasks[run_id] = asyncio.create_task(execute())
     return {'run_id': run_id}
 
 
 @app.post('/api/runs/{run_id}/pause')
 async def pause(run_id: str) -> dict[str, str]:
+    if run_id not in run_engines:
+        raise HTTPException(status_code=404, detail='Run not found')
     run_engines[run_id].pause()
     return {'status': 'paused'}
 
 
 @app.post('/api/runs/{run_id}/resume')
 async def resume(run_id: str) -> dict[str, str]:
+    if run_id not in run_engines:
+        raise HTTPException(status_code=404, detail='Run not found')
     run_engines[run_id].resume()
     return {'status': 'resumed'}
 
 
 @app.post('/api/runs/{run_id}/stop')
 async def stop(run_id: str) -> dict[str, str]:
+    if run_id not in run_engines:
+        raise HTTPException(status_code=404, detail='Run not found')
     run_engines[run_id].stop()
+    task = run_tasks.get(run_id)
+    if task and not task.done():
+        task.cancel()
     return {'status': 'stopped'}
 
 

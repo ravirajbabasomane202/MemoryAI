@@ -6,23 +6,23 @@ MemoraFlow is a local-first desktop/web hybrid workflow builder for personal mem
 
 ```text
 MemoraFlow/
-├─ frontend/                    # React 19 + Vite + Tailwind + React Flow canvas
+├─ frontend/
 │  ├─ src/
-│  │  ├─ components/Toolbar.tsx
-│  │  ├─ nodes/MemoraNode.tsx
-│  │  ├─ store/useWorkflowStore.ts
+│  │  ├─ components/Toolbar.tsx        # run controls + progress + import/export + add node
+│  │  ├─ nodes/MemoraNode.tsx          # AI/Python/Condition/Memory/Combine node UIs
+│  │  ├─ store/useWorkflowStore.ts     # mode, graph state, progress, node factories
 │  │  ├─ types/workflow.ts
-│  │  ├─ utils/api.ts
-│  │  ├─ App.tsx
+│  │  ├─ utils/api.ts                  # REST + WebSocket client
+│  │  ├─ App.tsx                       # canvas + autosave + live stream listeners
 │  │  ├─ main.tsx
 │  │  └─ styles.css
 │  ├─ package.json
 │  └─ ...
-├─ backend/                     # FastAPI + SQLite execution service
+├─ backend/
 │  ├─ app/
-│  │  ├─ main.py                # REST + WebSocket endpoints
-│  │  ├─ engine.py              # parallel/sequential execution + streaming
-│  │  ├─ db.py                  # SQLite + .memflow persistence
+│  │  ├─ main.py                       # REST + WebSocket server and run lifecycle APIs
+│  │  ├─ engine.py                     # parallel/sequential execution engine
+│  │  ├─ db.py                         # SQLite + .memflow save + memory + run logs
 │  │  └─ schemas.py
 │  └─ requirements.txt
 ├─ tauri/
@@ -34,17 +34,20 @@ MemoraFlow/
 └─ README.md
 ```
 
-## Features implemented
+## Implemented requirements checklist
 
-- Admin mode (editable) and User mode (read-only canvas execution)
-- Node types: AI, Python, Condition, Memory, Combine
-- Parallel-by-level + sequential dependency execution engine
-- WebSocket streaming for node status and token output
-- Ollama model discovery (`/api/models`) and generation stream support
-- SQLite persistence + `.memflow` JSON save flow
-- Play/Pause/Resume/Stop controls
-- Dark-mode default UI with minimap and animated flow edges
-- Keyboard shortcut: `Space` to trigger Play
+- ✅ React 19 + TypeScript + Vite + Tailwind + React Flow canvas
+- ✅ FastAPI backend with REST + WebSocket
+- ✅ Tauri desktop config for offline packaging
+- ✅ Ollama model auto-discovery endpoint and per-node model selection dropdown
+- ✅ Streaming token updates from Ollama to frontend in real time
+- ✅ Parallel-by-level + dependency-sequential execution
+- ✅ Python subprocess execution with isolated mode + CPU/memory/time bounds
+- ✅ Memory node persistence + encrypted placeholder handling for sensitive memory keys
+- ✅ Admin edit mode and User read-only mode
+- ✅ Play/Pause/Resume/Stop controls with keyboard shortcuts (Space, Esc)
+- ✅ Workflow save + autosave + import/export `.memflow`
+- ✅ Real-time progress bar while workflow runs
 
 ## Installation
 
@@ -95,30 +98,25 @@ cd tauri/src-tauri
 cargo tauri build
 ```
 
-For live desktop dev:
+For desktop dev:
 
 ```bash
 cd tauri/src-tauri
 cargo tauri dev
 ```
 
-## How execution works
+## Execution model details
 
-- The backend builds a DAG from edges and computes node indegrees.
-- Nodes with indegree 0 start first.
-- Each wave/level is run concurrently with `asyncio.gather` (parallel).
-- Children wait until parent nodes complete (sequential by dependency).
-- AI nodes call Ollama with streaming enabled and forward token chunks through websocket events.
-- Python nodes execute in isolated Python mode (`-I`) with CPU/memory/time limits.
-- Memory nodes persist key-value data in SQLite for later prompt injection.
-- Combine nodes merge parent outputs (`text` or `array` mode).
+- The engine converts edges into a DAG (indegree + adjacency maps).
+- Nodes with indegree `0` run first.
+- Each level is executed in parallel using `asyncio.gather`.
+- Children are queued only after all upstream dependencies complete.
+- The server emits WebSocket events for state transitions and output chunks.
+- Progress (`completed_nodes / total_nodes`) is emitted as metadata and shown in the UI bar.
+- Stop cancels the backend run task; pause/resume gate node processing via an async event.
 
-## Export/Import
+## Security notes
 
-- Save creates `.memflow` files inside `backend/workflows/`.
-- Import can be added by loading a `.memflow` file and calling `setGraph` in store (hook already present).
-
-## Notes on security
-
-- Python execution is process-isolated and constrained with `setrlimit` on Unix-like systems.
-- For highly sensitive secrets, add field-level encryption or OS keychain integration before production deployment.
+- Python code executes in a subprocess (`python -I`) with RLIMIT CPU + memory limits (Unix) and timeout.
+- Memory keys containing `password` or `secret` are obfuscated before SQLite storage and rendered as `[ENCRYPTED_SECRET]` in prompt context.
+- For strict production security, replace current secret handling with OS keychain or SQLCipher-backed encryption.

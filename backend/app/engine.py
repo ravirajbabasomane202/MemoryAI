@@ -10,14 +10,14 @@ import tempfile
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Awaitable, Callable
 
 import httpx
 
 from .db import get_memory_context, save_memory_item
 from .schemas import EventMessage, FlowEdge, FlowNode, WorkflowPayload
 
-EventSink = Callable[[EventMessage], asyncio.Future]
+EventSink = Callable[[EventMessage], Awaitable[None]]
 
 
 @dataclass
@@ -59,20 +59,33 @@ class WorkflowEngine:
     async def run(self, payload: WorkflowPayload) -> None:
         nodes = {n.id: n for n in payload.nodes}
         parents, children, indegree = self._graph(payload.nodes, payload.edges)
+        total = len(nodes)
+        completed = 0
 
         queue = deque([n_id for n_id, deg in indegree.items() if deg == 0])
+        visited: set[str] = set()
 
         while queue:
             level = list(queue)
             queue.clear()
             tasks = [asyncio.create_task(self.execute_node(nodes[n_id], parents[n_id])) for n_id in level]
-            await asyncio.gather(*tasks)
+            await asyncio.gather(*tasks, return_exceptions=True)
 
             for n_id in level:
+                visited.add(n_id)
+                completed += 1
+                await self.emit('system', meta={'progress': completed / max(total, 1)})
                 for child in children[n_id]:
                     indegree[child] -= 1
                     if indegree[child] == 0:
                         queue.append(child)
+
+            if self.state.stopped:
+                break
+
+        if len(visited) != len(nodes):
+            cycle_nodes = sorted(set(nodes.keys()) - visited)
+            await self.emit('system', status='error', output=f'Graph cycle or unreachable nodes detected: {cycle_nodes}')
 
     def _graph(self, nodes: list[FlowNode], edges: list[FlowEdge]):
         parents = defaultdict(list)
@@ -130,6 +143,9 @@ class WorkflowEngine:
             ) as response:
                 response.raise_for_status()
                 async for line in response.aiter_lines():
+                    await self._await_if_paused()
+                    if self.state.stopped:
+                        raise asyncio.CancelledError('Run stopped')
                     if not line.strip():
                         continue
                     payload = json.loads(line)
@@ -151,7 +167,7 @@ class WorkflowEngine:
         def limit_resources() -> None:
             if os.name != 'nt':
                 resource.setrlimit(resource.RLIMIT_CPU, (2, 2))
-                resource.setrlimit(resource.RLIMIT_AS, (512 * 1024 * 1024, 512 * 1024 * 1024))
+                resource.setrlimit(resource.RLIMIT_AS, (256 * 1024 * 1024, 256 * 1024 * 1024))
 
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -162,8 +178,10 @@ class WorkflowEngine:
                 stderr=asyncio.subprocess.PIPE,
                 preexec_fn=limit_resources if os.name != 'nt' else None
             )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10)
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=8)
             out = stdout.decode() + stderr.decode()
+            if proc.returncode != 0:
+                raise RuntimeError(out.strip() or 'Python node failed')
             await self.emit(node.id, chunk=out)
             return out
         finally:
@@ -173,7 +191,7 @@ class WorkflowEngine:
     async def _run_condition(self, node: FlowNode, input_values: list[Any]) -> str:
         expr = node.data.condition or 'True'
         context = {'inputs': input_values, 'success': all(v is not None for v in input_values)}
-        result = bool(eval(expr, {'__builtins__': {}}, context))  # controlled expression only
+        result = bool(eval(expr, {'__builtins__': {}}, context))
         return 'true' if result else 'false'
 
     async def _run_memory_node(self, node: FlowNode) -> str:

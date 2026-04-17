@@ -4,14 +4,14 @@ import { useWorkflowStore } from '../store/useWorkflowStore';
 
 const statusClasses = {
   idle: 'border-slate-700',
-  running: 'border-sky-400 animate-pulse',
+  running: 'border-sky-400 shadow-sky-400/30 animate-pulse',
   success: 'border-emerald-500',
   error: 'border-rose-500',
   paused: 'border-amber-500'
 };
 
 export function MemoraNode({ id, data }: { id: string; data: MemoraNodeData }) {
-  const { mode, updateNodeData } = useWorkflowStore();
+  const { mode, models, updateNodeData } = useWorkflowStore();
   const readOnly = mode === 'user';
 
   return (
@@ -24,18 +24,25 @@ export function MemoraNode({ id, data }: { id: string; data: MemoraNodeData }) {
 
       {data.type === 'ai' && (
         <>
-          <input
+          <select
             className="mb-2 w-full rounded bg-slate-800 p-2 text-sm"
             value={data.model ?? ''}
             onChange={(e) => updateNodeData(id, { model: e.target.value })}
             disabled={readOnly}
-            placeholder="Ollama model"
-          />
+          >
+            <option value="">Select model...</option>
+            {models.map((model) => (
+              <option key={model} value={model}>
+                {model}
+              </option>
+            ))}
+          </select>
           <textarea
             className="h-24 w-full rounded bg-slate-800 p-2 text-sm"
             value={data.prompt ?? ''}
             disabled={readOnly}
             onChange={(e) => updateNodeData(id, { prompt: e.target.value })}
+            placeholder="Write AI prompt. Memory placeholders: {{memory.key}}"
           />
         </>
       )}
@@ -46,6 +53,7 @@ export function MemoraNode({ id, data }: { id: string; data: MemoraNodeData }) {
           value={data.code ?? ''}
           disabled={readOnly}
           onChange={(e) => updateNodeData(id, { code: e.target.value })}
+          placeholder="print(INPUTS)"
         />
       )}
 
@@ -56,7 +64,7 @@ export function MemoraNode({ id, data }: { id: string; data: MemoraNodeData }) {
             value={data.memoryKey ?? ''}
             disabled={readOnly}
             onChange={(e) => updateNodeData(id, { memoryKey: e.target.value })}
-            placeholder="Memory key"
+            placeholder="Memory key (e.g. password.github)"
           />
           <textarea
             className="h-16 w-full rounded bg-slate-800 p-2 text-sm"
@@ -68,13 +76,26 @@ export function MemoraNode({ id, data }: { id: string; data: MemoraNodeData }) {
         </>
       )}
 
-      {(data.type === 'condition' || data.type === 'combine') && (
+      {data.type === 'condition' && (
         <input
           className="w-full rounded bg-slate-800 p-2 text-sm"
-          value={data.condition ?? data.combineMode ?? ''}
+          value={data.condition ?? ''}
           disabled={readOnly}
           onChange={(e) => updateNodeData(id, { condition: e.target.value })}
+          placeholder="Python bool expression, e.g. success and 'ok' in str(inputs[0])"
         />
+      )}
+
+      {data.type === 'combine' && (
+        <select
+          className="w-full rounded bg-slate-800 p-2 text-sm"
+          value={data.combineMode ?? 'text'}
+          disabled={readOnly}
+          onChange={(e) => updateNodeData(id, { combineMode: e.target.value as 'array' | 'text' })}
+        >
+          <option value="text">Concatenate text</option>
+          <option value="array">Array</option>
+        </select>
       )}
 
       <div className="mt-2 max-h-28 overflow-auto rounded bg-black/30 p-2 text-xs text-slate-300">{data.output || 'No output yet.'}</div>

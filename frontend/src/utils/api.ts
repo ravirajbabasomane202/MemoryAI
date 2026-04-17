@@ -4,7 +4,7 @@ const API_BASE = 'http://127.0.0.1:8008';
 
 export async function getOllamaModels(): Promise<string[]> {
   const res = await fetch(`${API_BASE}/api/models`);
-  if (!res.ok) throw new Error('Failed to fetch models');
+  if (!res.ok) return [];
   return res.json();
 }
 
@@ -16,6 +16,7 @@ export async function saveWorkflow(payload: WorkflowFile) {
   });
 
   if (!res.ok) throw new Error('Failed to save workflow');
+  return res.json() as Promise<{ path: string }>;
 }
 
 export function createExecutionSocket(runId: string): WebSocket {
