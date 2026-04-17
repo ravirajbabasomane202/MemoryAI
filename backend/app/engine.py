@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import json
 import os
+import subprocess
 try:
     import resource  # Unix-only
 except ModuleNotFoundError:  # Windows
@@ -129,9 +130,6 @@ class WorkflowEngine:
         except Exception:  # noqa: BLE001
             self.results[node.id] = None
             await self.emit(node.id, status='error', output=traceback.format_exc())
-        except Exception as exc:  # noqa: BLE001
-            self.results[node.id] = None
-            await self.emit(node.id, status='error', output=str(exc))
 
     async def _run_ai_node(self, node: FlowNode, input_values: list[Any]) -> str:
         prompt = node.data.prompt or ''
@@ -168,33 +166,37 @@ class WorkflowEngine:
         code = node.data.code or 'print("No code provided")'
         wrapped = f"INPUTS = {repr(input_values)}\n{code}\n"
 
-        with tempfile.NamedTemporaryFile('w', suffix='.py', delete=False) as f:
+        with tempfile.NamedTemporaryFile('w', suffix='.py', delete=False, encoding='utf-8') as f:
             temp_path = Path(f.name)
             f.write(wrapped)
 
-        def limit_resources() -> None:
+        def runner() -> tuple[str, int]:
+            kwargs: dict[str, Any] = {
+                'capture_output': True,
+                'text': True,
+                'timeout': 8
+            }
+
             if os.name != 'nt' and resource is not None:
-                resource.setrlimit(resource.RLIMIT_CPU, (2, 2))
-                resource.setrlimit(resource.RLIMIT_AS, (256 * 1024 * 1024, 256 * 1024 * 1024))
+                def limit_resources() -> None:
+                    resource.setrlimit(resource.RLIMIT_CPU, (2, 2))
+                    resource.setrlimit(resource.RLIMIT_AS, (256 * 1024 * 1024, 256 * 1024 * 1024))
+
+                kwargs['preexec_fn'] = limit_resources
+
+            completed = subprocess.run([sys.executable, '-I', str(temp_path)], **kwargs)
+            return (completed.stdout or '') + (completed.stderr or ''), completed.returncode
 
         try:
-            proc = await asyncio.create_subprocess_exec(
-                sys.executable,
-                '-I',
-                str(temp_path),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                preexec_fn=limit_resources if os.name != 'nt' and resource is not None else None
-            )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=8)
-            stdout_text = stdout.decode()
-            stderr_text = stderr.decode()
-            out = (stdout_text + stderr_text).strip()
-            combined = out if out else 'No output yet'
-            await self.emit(node.id, chunk=combined)
-            if proc.returncode != 0:
-                raise RuntimeError(stderr_text or stdout_text or 'Python node failed')
-            return combined
+            output, return_code = await asyncio.to_thread(runner)
+            cleaned = output.strip()
+            visible = cleaned if cleaned else 'No output yet'
+            await self.emit(node.id, chunk=visible)
+
+            if return_code != 0:
+                raise RuntimeError(visible)
+
+            return visible
         finally:
             with contextlib.suppress(FileNotFoundError):
                 temp_path.unlink()

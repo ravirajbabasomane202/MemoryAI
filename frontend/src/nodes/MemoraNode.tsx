@@ -99,7 +99,7 @@ export function MemoraNode({ id, data }: { id: string; data: MemoraNodeData }) {
           value={data.condition ?? ''}
           disabled={readOnly}
           onChange={(e) => updateNodeData(id, { condition: e.target.value })}
-          placeholder="Python bool expression, e.g. success and 'ok' in str(inputs[0])"
+          placeholder="Python bool expression"
         />
       )}
 

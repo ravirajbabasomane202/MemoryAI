@@ -93,10 +93,6 @@ function Canvas() {
         event.preventDefault();
         document.querySelector<HTMLButtonElement>('button')?.click();
       }
-      if (event.code === 'Escape') {
-        const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>('button'));
-        buttons.find((button) => button.textContent?.includes('Stop'))?.click();
-      }
     }
 
     window.addEventListener('keydown', onKeyDown);
