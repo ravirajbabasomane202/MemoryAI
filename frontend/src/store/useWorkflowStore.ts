@@ -49,8 +49,7 @@ const starterNodes: MemoraNode[] = [
       type: 'memory',
       memoryKey: 'project',
       memoryValue: 'MemoryAI setup',
-      status: 'idle',
-      retryCount: 0
+      status: 'idle'
     }
   },
   {
@@ -62,15 +61,14 @@ const starterNodes: MemoraNode[] = [
       type: 'ai',
       model: 'llama3.2',
       prompt: 'Summarize {{memory.project}}',
-      status: 'idle',
-      retryCount: 0
+      status: 'idle'
     }
   }
 ];
 
 function defaultData(kind: NodeKind) {
-  if (kind === 'ai') return { label: 'AI Node', type: 'ai', prompt: '', model: '', status: 'idle' as const, retryCount: 0 };
-  if (kind === 'python') return { label: 'Python Node', type: 'python', code: 'print("Hello")', status: 'idle' as const, retryCount: 0 };
+  if (kind === 'ai') return { label: 'AI Node', type: 'ai', prompt: '', model: '', status: 'idle' as const };
+  if (kind === 'python') return { label: 'Python Node', type: 'python', code: 'print("Hello")', status: 'idle' as const };
   if (kind === 'condition') return { label: 'Condition Node', type: 'condition', condition: 'success', status: 'idle' as const };
   if (kind === 'memory') return { label: 'Memory Node', type: 'memory', memoryKey: '', memoryValue: '', status: 'idle' as const };
   return { label: 'Combine Node', type: 'combine', combineMode: 'text' as const, status: 'idle' as const };

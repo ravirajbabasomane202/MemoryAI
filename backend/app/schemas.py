@@ -17,7 +17,6 @@ class NodeData(BaseModel):
     combineMode: Literal['array', 'text'] | None = None
     output: str | None = None
     status: Literal['idle', 'running', 'success', 'error', 'paused'] = 'idle'
-    retryCount: int = 0
 
 
 class FlowNode(BaseModel):
@@ -30,7 +29,6 @@ class FlowEdge(BaseModel):
     id: str
     source: str
     target: str
-    sourceHandle: str | None = None
 
 
 class WorkflowPayload(BaseModel):

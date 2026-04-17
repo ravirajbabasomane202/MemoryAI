@@ -4,11 +4,11 @@ import asyncio
 import uuid
 from collections import defaultdict
 
-from fastapi import FastAPI, HTTPException, Query, WebSocket
+from fastapi import FastAPI, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.websockets import WebSocketDisconnect
 
-from .db import append_run_log, delete_memory_item, init_db, list_memories, list_run_logs, save_memory_item, save_workflow
+from .db import append_run_log, init_db, save_workflow
 from .engine import WorkflowEngine
 from .schemas import EventMessage, WorkflowPayload
 
@@ -47,34 +47,12 @@ async def models() -> list[str]:
     return [item['name'] for item in payload.get('models', [])]
 
 
-
-
-@app.get('/api/memories')
-async def memories(q: str = Query(default='')) -> list[dict]:
-    return await list_memories(q)
-
-
-@app.post('/api/memories')
-async def create_memory(payload: dict) -> dict[str, str]:
-    await save_memory_item(str(payload.get('key', '')), str(payload.get('value', '')), str(payload.get('tags', '')))
-    return {'status': 'ok'}
-
-
-@app.delete('/api/memories/{memory_id}')
-async def delete_memory(memory_id: int) -> dict[str, str]:
-    await delete_memory_item(memory_id)
-    return {'status': 'deleted'}
 @app.post('/api/workflows/save')
 async def save(payload: WorkflowPayload) -> dict[str, str]:
     target = await save_workflow(payload.name, payload.mode, payload.model_dump())
     return {'path': str(target)}
 
 
-
-
-@app.get('/api/history')
-async def history(limit: int = Query(default=200, ge=1, le=2000)) -> list[dict]:
-    return await list_run_logs(limit)
 @app.post('/api/runs')
 async def run(payload: WorkflowPayload) -> dict[str, str]:
     run_id = str(uuid.uuid4())

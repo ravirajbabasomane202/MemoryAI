@@ -15,7 +15,6 @@ export interface MemoraNodeData {
   combineMode?: 'array' | 'text';
   output?: string;
   status: NodeStatus;
-  retryCount?: number;
 }
 
 export type MemoraNode = Node<MemoraNodeData>;

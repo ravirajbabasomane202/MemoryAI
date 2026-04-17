@@ -64,13 +64,11 @@ class WorkflowEngine:
 
     async def run(self, payload: WorkflowPayload) -> None:
         nodes = {n.id: n for n in payload.nodes}
-        parents, outgoing_edges, indegree = self._graph(payload.nodes, payload.edges)
+        parents, children, indegree = self._graph(payload.nodes, payload.edges)
         total = len(nodes)
         completed = 0
 
-        roots = [n_id for n_id, deg in indegree.items() if deg == 0]
-        queue = deque(roots)
-        activated_inputs: dict[str, int] = defaultdict(int)
+        queue = deque([n_id for n_id, deg in indegree.items() if deg == 0])
         visited: set[str] = set()
 
         while queue:
@@ -83,84 +81,59 @@ class WorkflowEngine:
                 visited.add(n_id)
                 completed += 1
                 await self.emit('system', meta={'progress': completed / max(total, 1)})
-
-                parent_node = nodes[n_id]
-                parent_result = str(self.results.get(n_id, ''))
-
-                for edge in outgoing_edges[n_id]:
-                    child = edge.target
-                    active = True
-                    if parent_node.data.type == 'condition':
-                        edge_route = edge.sourceHandle or 'true'
-                        active = parent_result == edge_route
-
-                    if active:
-                        activated_inputs[child] += 1
-
+                for child in children[n_id]:
                     indegree[child] -= 1
                     if indegree[child] == 0:
-                        if child in roots or activated_inputs[child] > 0:
-                            queue.append(child)
-                        else:
-                            self.results[child] = None
-                            await self.emit(child, status='success', output='Skipped: condition route not matched')
-                            visited.add(child)
+                        queue.append(child)
 
             if self.state.stopped:
                 break
 
         if len(visited) != len(nodes):
-            blocked = sorted(set(nodes.keys()) - visited)
-            await self.emit('system', status='error', output=f'Unreachable nodes detected: {blocked}')
+            cycle_nodes = sorted(set(nodes.keys()) - visited)
+            await self.emit('system', status='error', output=f'Graph cycle or unreachable nodes detected: {cycle_nodes}')
 
     def _graph(self, nodes: list[FlowNode], edges: list[FlowEdge]):
         parents = defaultdict(list)
-        outgoing_edges: dict[str, list[FlowEdge]] = defaultdict(list)
+        children = defaultdict(list)
         indegree = {n.id: 0 for n in nodes}
 
         for e in edges:
             parents[e.target].append(e.source)
-            outgoing_edges[e.source].append(e)
+            children[e.source].append(e.target)
             indegree[e.target] += 1
 
-        return parents, outgoing_edges, indegree
+        return parents, children, indegree
 
     async def execute_node(self, node: FlowNode, parent_ids: list[str]) -> None:
         await self._await_if_paused()
         await self.emit(node.id, status='running')
 
         input_values = [self.results.get(pid) for pid in parent_ids]
-        retries = max(0, int(getattr(node.data, 'retryCount', 0) or 0))
 
-        for attempt in range(retries + 1):
-            try:
-                if node.data.type == 'ai':
-                    output = await self._run_ai_node(node, input_values)
-                elif node.data.type == 'python':
-                    output = await self._run_python_node(node, input_values)
-                elif node.data.type == 'condition':
-                    output = await self._run_condition(node, input_values)
-                elif node.data.type == 'memory':
-                    output = await self._run_memory_node(node)
-                elif node.data.type == 'combine':
-                    output = self._run_combine(node, input_values)
-                else:
-                    output = ''
+        try:
+            if node.data.type == 'ai':
+                output = await self._run_ai_node(node, input_values)
+            elif node.data.type == 'python':
+                output = await self._run_python_node(node, input_values)
+            elif node.data.type == 'condition':
+                output = await self._run_condition(node, input_values)
+            elif node.data.type == 'memory':
+                output = await self._run_memory_node(node)
+            elif node.data.type == 'combine':
+                output = self._run_combine(node, input_values)
+            else:
+                output = ''
 
-                self.results[node.id] = output
-                await self.emit(node.id, status='success', output=str(output))
-                return
-            except Exception:  # noqa: BLE001
-                if attempt < retries:
-                    await self.emit(node.id, chunk=f"Retry {attempt + 1}/{retries}...\n")
-                    continue
-                self.results[node.id] = None
-                await self.emit(node.id, status='error', output=traceback.format_exc())
-                return
+            self.results[node.id] = output
+            await self.emit(node.id, status='success', output=str(output))
+        except Exception:  # noqa: BLE001
+            self.results[node.id] = None
+            await self.emit(node.id, status='error', output=traceback.format_exc())
 
     async def _run_ai_node(self, node: FlowNode, input_values: list[Any]) -> str:
         prompt = node.data.prompt or ''
-        memory = await get_memory_context(prompt)
+        memory = await get_memory_context()
         for key, value in memory.items():
             prompt = prompt.replace(f'{{{{memory.{key}}}}}', value)
 

@@ -11,8 +11,8 @@ const statusClasses = {
 };
 
 export function MemoraNode({ id, data }: { id: string; data: MemoraNodeData }) {
-  const { models, updateNodeData, requestDeleteNode } = useWorkflowStore();
-  const readOnly = false;
+  const { mode, models, updateNodeData, requestDeleteNode } = useWorkflowStore();
+  const readOnly = mode === 'user';
 
   return (
     <div
@@ -61,12 +61,10 @@ export function MemoraNode({ id, data }: { id: string; data: MemoraNodeData }) {
             onChange={(e) => updateNodeData(id, { prompt: e.target.value })}
             placeholder="Write AI prompt. Memory placeholders: {{memory.key}}"
           />
-          <input className="mt-2 w-full rounded bg-slate-800 p-2 text-xs" type="number" min={0} value={data.retryCount ?? 0} onChange={(e)=>updateNodeData(id,{retryCount:Number(e.target.value)||0})} placeholder="Retry count" />
         </>
       )}
 
       {data.type === 'python' && (
-        <>
         <textarea
           className="h-24 w-full rounded bg-slate-800 p-2 text-sm font-mono"
           value={data.code ?? ''}
@@ -74,8 +72,6 @@ export function MemoraNode({ id, data }: { id: string; data: MemoraNodeData }) {
           onChange={(e) => updateNodeData(id, { code: e.target.value })}
           placeholder="print('Hello')"
         />
-        <input className="mt-2 w-full rounded bg-slate-800 p-2 text-xs" type="number" min={0} value={data.retryCount ?? 0} onChange={(e)=>updateNodeData(id,{retryCount:Number(e.target.value)||0})} placeholder="Retry count" />
-        </>
       )}
 
       {data.type === 'memory' && (
@@ -85,7 +81,7 @@ export function MemoraNode({ id, data }: { id: string; data: MemoraNodeData }) {
             value={data.memoryKey ?? ''}
             disabled={readOnly}
             onChange={(e) => updateNodeData(id, { memoryKey: e.target.value })}
-            placeholder="Memory key"
+            placeholder="Memory key (e.g. password.github)"
           />
           <textarea
             className="h-16 w-full rounded bg-slate-800 p-2 text-sm"
@@ -98,16 +94,13 @@ export function MemoraNode({ id, data }: { id: string; data: MemoraNodeData }) {
       )}
 
       {data.type === 'condition' && (
-        <>
-          <div className="mb-1 flex justify-end gap-4 pr-3 text-[10px] uppercase text-slate-400"><span>true</span><span>false</span></div>
-          <input
-            className="w-full rounded bg-slate-800 p-2 text-sm"
-            value={data.condition ?? ''}
-            disabled={readOnly}
-            onChange={(e) => updateNodeData(id, { condition: e.target.value })}
-            placeholder="Python bool expression"
-          />
-        </>
+        <input
+          className="w-full rounded bg-slate-800 p-2 text-sm"
+          value={data.condition ?? ''}
+          disabled={readOnly}
+          onChange={(e) => updateNodeData(id, { condition: e.target.value })}
+          placeholder="Python bool expression"
+        />
       )}
 
       {data.type === 'combine' && (
@@ -125,15 +118,7 @@ export function MemoraNode({ id, data }: { id: string; data: MemoraNodeData }) {
       <div className="mt-2 max-h-28 overflow-auto whitespace-pre-wrap rounded bg-black/30 p-2 text-xs text-slate-300">
         {data.output || 'No output yet'}
       </div>
-
-      {data.type === 'condition' ? (
-        <>
-          <Handle id="true" type="source" position={Position.Right} style={{ top: '38%' }} className="!bg-emerald-400" />
-          <Handle id="false" type="source" position={Position.Right} style={{ top: '68%' }} className="!bg-rose-400" />
-        </>
-      ) : (
-        <Handle type="source" position={Position.Right} className="!bg-emerald-400" />
-      )}
+      <Handle type="source" position={Position.Right} className="!bg-emerald-400" />
     </div>
   );
 }

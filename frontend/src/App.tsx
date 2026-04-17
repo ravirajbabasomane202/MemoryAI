@@ -12,6 +12,7 @@ function Canvas() {
   const {
     nodes,
     edges,
+    mode,
     onNodesChange,
     onEdgesChange,
     onConnect,
@@ -33,9 +34,9 @@ function Canvas() {
   }, [setModels]);
 
   useEffect(() => {
-    if (runId) return;
+    if (mode !== 'admin' || runId) return;
 
-    const payload = { name: 'MemoraFlow Workflow', mode: 'admin' as const, nodes, edges };
+    const payload = { name: 'MemoraFlow Workflow', mode, nodes, edges };
     const hash = JSON.stringify(payload);
     if (hash === lastAutosaveHash.current) return;
 
@@ -45,7 +46,7 @@ function Canvas() {
     }, 1500);
 
     return () => clearTimeout(timer);
-  }, [nodes, edges, runId]);
+  }, [nodes, edges, mode, runId]);
 
   useEffect(() => {
     if (!runId) return;
@@ -88,9 +89,6 @@ function Canvas() {
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      const target = event.target as HTMLElement | null;
-      const typing = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
-      if (typing) return;
       if (event.code === 'Space') {
         event.preventDefault();
         document.querySelector<HTMLButtonElement>('button')?.click();
@@ -107,12 +105,12 @@ function Canvas() {
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        nodesDraggable
-        nodesConnectable
-        elementsSelectable
+        onNodesChange={mode === 'admin' ? onNodesChange : undefined}
+        onEdgesChange={mode === 'admin' ? onEdgesChange : undefined}
+        onConnect={mode === 'admin' ? onConnect : undefined}
+        nodesDraggable={mode === 'admin'}
+        nodesConnectable={mode === 'admin'}
+        elementsSelectable={mode === 'admin'}
         fitView
         className="bg-slate-950"
       >
