@@ -1,0 +1,22 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "MemoraFlow",
+  "version": "0.1.0",
+  "identifier": "com.memoraflow.app",
+  "build": {
+    "beforeDevCommand": "cd ../../frontend && npm run dev",
+    "beforeBuildCommand": "cd ../../frontend && npm run build",
+    "devUrl": "http://localhost:5173",
+    "frontendDist": "../../frontend/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "MemoraFlow",
+        "width": 1500,
+        "height": 900,
+        "resizable": true
+      }
+    ]
+  }
+}
