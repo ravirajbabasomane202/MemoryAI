@@ -15,16 +15,40 @@ export function Toolbar() {
     edges,
     addNode,
     clearOutputs,
-    progress
+    progress,
+    executionState,
+    setExecutionState
   } = useWorkflowStore();
   const fileInput = useRef<HTMLInputElement>(null);
 
   const payload = useMemo<WorkflowFile>(() => ({ name: 'MemoraFlow Workflow', mode, nodes, edges }), [mode, nodes, edges]);
 
-  async function play() {
-    clearOutputs();
-    const { run_id } = await runWorkflow(payload);
-    setRunId(run_id);
+  async function toggleExecution() {
+    if (executionState === 'idle') {
+      if (runId) await controlRun(runId, 'stop');
+      clearOutputs();
+      const { run_id } = await runWorkflow(payload);
+      setRunId(run_id);
+      setExecutionState('running');
+      return;
+    }
+
+    if (!runId) return;
+
+    if (executionState === 'running') {
+      await controlRun(runId, 'pause');
+      setExecutionState('paused');
+      return;
+    }
+
+    await controlRun(runId, 'resume');
+    setExecutionState('running');
+  }
+
+  async function stopExecution() {
+    if (runId) await controlRun(runId, 'stop');
+    setRunId(undefined);
+    setExecutionState('idle');
   }
 
   async function saveNow() {
@@ -50,12 +74,12 @@ export function Toolbar() {
     reader.readAsText(file);
   }
 
+  const toggleIcon = executionState === 'idle' ? '▶️' : executionState === 'running' ? '⏸️' : '⏯️';
+
   return (
     <header className="flex flex-wrap items-center gap-2 border-b border-slate-800 bg-slate-900 p-3">
-      <button className="rounded bg-sky-600 px-3 py-2" onClick={play}>Play ▶️</button>
-      <button className="rounded bg-amber-600 px-3 py-2" onClick={() => runId && controlRun(runId, 'pause')}>Pause ⏸️</button>
-      <button className="rounded bg-emerald-600 px-3 py-2" onClick={() => runId && controlRun(runId, 'resume')}>Resume ▶️</button>
-      <button className="rounded bg-rose-600 px-3 py-2" onClick={() => runId && controlRun(runId, 'stop')}>Stop ⏹️</button>
+      <button className="rounded bg-sky-600 px-3 py-2" onClick={toggleExecution} title="Play / Pause / Resume">{toggleIcon}</button>
+      <button className="rounded bg-rose-600 px-3 py-2" onClick={stopExecution} title="Stop">⏹️</button>
       <button className="rounded bg-slate-700 px-3 py-2" onClick={saveNow}>Save</button>
       <button className="rounded bg-slate-700 px-3 py-2" onClick={exportJson}>Export</button>
       <button className="rounded bg-slate-700 px-3 py-2" onClick={() => fileInput.current?.click()}>Import</button>

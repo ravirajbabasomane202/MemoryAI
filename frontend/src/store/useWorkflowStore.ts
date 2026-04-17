@@ -9,6 +9,8 @@ import {
 } from '@xyflow/react';
 import type { MemoraEdge, MemoraNode, NodeKind } from '../types/workflow';
 
+export type ExecutionState = 'idle' | 'running' | 'paused';
+
 interface WorkflowState {
   mode: 'admin' | 'user';
   nodes: MemoraNode[];
@@ -16,6 +18,8 @@ interface WorkflowState {
   runId?: string;
   models: string[];
   progress: number;
+  executionState: ExecutionState;
+  deleteTargetId?: string;
   onNodesChange: (changes: NodeChange<MemoraNode>[]) => void;
   onEdgesChange: (changes: EdgeChange<MemoraEdge>[]) => void;
   onConnect: (connection: Connection) => void;
@@ -23,10 +27,14 @@ interface WorkflowState {
   setRunId: (runId?: string) => void;
   setModels: (models: string[]) => void;
   setProgress: (progress: number) => void;
+  setExecutionState: (state: ExecutionState) => void;
   addNode: (kind: NodeKind) => void;
   updateNodeData: (id: string, patch: Partial<MemoraNode['data']>) => void;
   setGraph: (nodes: MemoraNode[], edges: MemoraEdge[]) => void;
   clearOutputs: () => void;
+  requestDeleteNode: (id: string) => void;
+  cancelDeleteNode: () => void;
+  confirmDeleteNode: () => void;
 }
 
 let nodeCounter = 2;
@@ -60,7 +68,7 @@ const starterNodes: MemoraNode[] = [
 
 function defaultData(kind: NodeKind) {
   if (kind === 'ai') return { label: 'AI Node', type: 'ai', prompt: '', model: '', status: 'idle' as const };
-  if (kind === 'python') return { label: 'Python Node', type: 'python', code: 'print(INPUTS)', status: 'idle' as const };
+  if (kind === 'python') return { label: 'Python Node', type: 'python', code: 'print("Hello")', status: 'idle' as const };
   if (kind === 'condition') return { label: 'Condition Node', type: 'condition', condition: 'success', status: 'idle' as const };
   if (kind === 'memory') return { label: 'Memory Node', type: 'memory', memoryKey: '', memoryValue: '', status: 'idle' as const };
   return { label: 'Combine Node', type: 'combine', combineMode: 'text' as const, status: 'idle' as const };
@@ -72,6 +80,8 @@ export const useWorkflowStore = create<WorkflowState>((set) => ({
   edges: [{ id: 'e1', source: 'memory-1', target: 'ai-1', animated: true, className: 'edge-flow' }],
   models: [],
   progress: 0,
+  executionState: 'idle',
+  deleteTargetId: undefined,
   onNodesChange: (changes) => set((s) => ({ nodes: applyNodeChanges(changes, s.nodes) })),
   onEdgesChange: (changes) => set((s) => ({ edges: applyEdgeChanges(changes, s.edges) })),
   onConnect: (connection) => set((s) => ({ edges: addEdge({ ...connection, animated: true, className: 'edge-flow' }, s.edges) })),
@@ -79,6 +89,7 @@ export const useWorkflowStore = create<WorkflowState>((set) => ({
   setRunId: (runId) => set({ runId }),
   setModels: (models) => set({ models }),
   setProgress: (progress) => set({ progress }),
+  setExecutionState: (executionState) => set({ executionState }),
   addNode: (kind) =>
     set((s) => {
       nodeCounter += 1;
@@ -103,5 +114,16 @@ export const useWorkflowStore = create<WorkflowState>((set) => ({
     set((s) => ({
       progress: 0,
       nodes: s.nodes.map((n) => ({ ...n, data: { ...n.data, output: '', status: 'idle' } }))
-    }))
+    })),
+  requestDeleteNode: (id) => set({ deleteTargetId: id }),
+  cancelDeleteNode: () => set({ deleteTargetId: undefined }),
+  confirmDeleteNode: () =>
+    set((s) => {
+      if (!s.deleteTargetId) return {};
+      return {
+        deleteTargetId: undefined,
+        nodes: s.nodes.filter((n) => n.id !== s.deleteTargetId),
+        edges: s.edges.filter((e) => e.source !== s.deleteTargetId && e.target !== s.deleteTargetId)
+      };
+    })
 }));

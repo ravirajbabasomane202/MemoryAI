@@ -4,9 +4,14 @@ import asyncio
 import contextlib
 import json
 import os
-import resource
+try:
+    import resource  # Unix-only
+except ModuleNotFoundError:  # Windows
+    resource = None
+
 import sys
 import tempfile
+import traceback
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -121,6 +126,9 @@ class WorkflowEngine:
 
             self.results[node.id] = output
             await self.emit(node.id, status='success', output=str(output))
+        except Exception:  # noqa: BLE001
+            self.results[node.id] = None
+            await self.emit(node.id, status='error', output=traceback.format_exc())
         except Exception as exc:  # noqa: BLE001
             self.results[node.id] = None
             await self.emit(node.id, status='error', output=str(exc))
@@ -165,7 +173,7 @@ class WorkflowEngine:
             f.write(wrapped)
 
         def limit_resources() -> None:
-            if os.name != 'nt':
+            if os.name != 'nt' and resource is not None:
                 resource.setrlimit(resource.RLIMIT_CPU, (2, 2))
                 resource.setrlimit(resource.RLIMIT_AS, (256 * 1024 * 1024, 256 * 1024 * 1024))
 
@@ -176,14 +184,17 @@ class WorkflowEngine:
                 str(temp_path),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                preexec_fn=limit_resources if os.name != 'nt' else None
+                preexec_fn=limit_resources if os.name != 'nt' and resource is not None else None
             )
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=8)
-            out = stdout.decode() + stderr.decode()
+            stdout_text = stdout.decode()
+            stderr_text = stderr.decode()
+            out = (stdout_text + stderr_text).strip()
+            combined = out if out else 'No output yet'
+            await self.emit(node.id, chunk=combined)
             if proc.returncode != 0:
-                raise RuntimeError(out.strip() or 'Python node failed')
-            await self.emit(node.id, chunk=out)
-            return out
+                raise RuntimeError(stderr_text or stdout_text or 'Python node failed')
+            return combined
         finally:
             with contextlib.suppress(FileNotFoundError):
                 temp_path.unlink()

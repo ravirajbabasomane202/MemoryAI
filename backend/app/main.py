@@ -6,6 +6,7 @@ from collections import defaultdict
 
 from fastapi import FastAPI, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.websockets import WebSocketDisconnect
 
 from .db import append_run_log, init_db, save_workflow
 from .engine import WorkflowEngine
@@ -107,8 +108,16 @@ async def stop(run_id: str) -> dict[str, str]:
 async def ws_events(websocket: WebSocket, run_id: str) -> None:
     await websocket.accept()
     queue = run_queues[run_id]
-    while True:
-        msg = await queue.get()
-        await websocket.send_json(msg.model_dump())
-        if msg.node_id == 'system' and msg.status == 'completed':
-            break
+    try:
+        while True:
+            msg = await queue.get()
+            await websocket.send_json(msg.model_dump())
+            if msg.node_id == 'system' and msg.status == 'completed':
+                break
+    except WebSocketDisconnect:
+        # client navigated away / new run started
+        pass
+    finally:
+        run_tasks.pop(run_id, None)
+        run_engines.pop(run_id, None)
+        run_queues.pop(run_id, None)

@@ -11,11 +11,28 @@ const statusClasses = {
 };
 
 export function MemoraNode({ id, data }: { id: string; data: MemoraNodeData }) {
-  const { mode, models, updateNodeData } = useWorkflowStore();
+  const { mode, models, updateNodeData, requestDeleteNode } = useWorkflowStore();
   const readOnly = mode === 'user';
 
   return (
-    <div className={`w-80 border-2 bg-slate-900/90 p-3 shadow-xl ${statusClasses[data.status]}`}>
+    <div
+      className={`group relative w-80 border-2 bg-slate-900/90 p-3 shadow-xl ${statusClasses[data.status]}`}
+      onContextMenu={(e) => {
+        if (readOnly) return;
+        e.preventDefault();
+        requestDeleteNode(id);
+      }}
+    >
+      {!readOnly && (
+        <button
+          className="absolute right-2 top-2 rounded bg-rose-600/90 px-2 py-0.5 text-xs opacity-0 transition group-hover:opacity-100"
+          onClick={() => requestDeleteNode(id)}
+          title="Delete node"
+        >
+          🗑
+        </button>
+      )}
+
       <Handle type="target" position={Position.Left} className="!bg-sky-400" />
       <div className="mb-2 flex items-center justify-between">
         <strong>{data.label}</strong>
@@ -53,7 +70,7 @@ export function MemoraNode({ id, data }: { id: string; data: MemoraNodeData }) {
           value={data.code ?? ''}
           disabled={readOnly}
           onChange={(e) => updateNodeData(id, { code: e.target.value })}
-          placeholder="print(INPUTS)"
+          placeholder="print('Hello')"
         />
       )}
 
@@ -98,7 +115,9 @@ export function MemoraNode({ id, data }: { id: string; data: MemoraNodeData }) {
         </select>
       )}
 
-      <div className="mt-2 max-h-28 overflow-auto rounded bg-black/30 p-2 text-xs text-slate-300">{data.output || 'No output yet.'}</div>
+      <div className="mt-2 max-h-28 overflow-auto whitespace-pre-wrap rounded bg-black/30 p-2 text-xs text-slate-300">
+        {data.output || 'No output yet'}
+      </div>
       <Handle type="source" position={Position.Right} className="!bg-emerald-400" />
     </div>
   );
